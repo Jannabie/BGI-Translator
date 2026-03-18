@@ -45,7 +45,7 @@ Output ada di `bin\Release\net10.0-windows\`.
 ## Cara Pakai
 
 1. Ekstrak arsip game dengan `CSystemArc.exe`
-2. Buka BGI Translator → drag & drop file script `.sc`
+2. Buka BGI Translator → drag & drop file script `biasanya tanpa ekstensi`
 3. Terjemahkan teks di kolom kanan
 4. Simpan → pack ulang dengan `CSystemArc.exe`
 
