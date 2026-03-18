@@ -494,6 +494,249 @@ namespace BGITranslator
         }
 
         // ══════════════════════════════════════════════════════════════
+        //  NAME DICTIONARY — karakter name header mapping
+        // ══════════════════════════════════════════════════════════════
+        // Deteksi otomatis: string pendek yang muncul berkali-kali
+        // di script = kemungkinan besar nama karakter.
+        // User tinggal isi kolom "Terjemahan", klik Apply.
+        // Semua baris yang exact-match nama itu langsung diganti.
+        // ══════════════════════════════════════════════════════════════
+        private void OpenNameDict()
+        {
+            if (_originals.Length == 0)
+            {
+                MessageBox.Show("Buka file script terlebih dahulu.", "Info",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            // ── Auto-detect nama karakter ─────────────────────────────
+            // Kriteria: string pendek (1-12 char), muncul >= 2 kali,
+            // tidak mengandung spasi/newline panjang, bukan perintah/path
+            Dictionary<string, int> freq = new Dictionary<string, int>();
+            foreach (string s in _originals)
+            {
+                if (s == null || s.Trim() == "") continue;
+                string t = s.Trim();
+                // Nama karakter biasanya: 1-12 karakter, tidak mengandung
+                // titik/tanda baca panjang, tidak dimulai dengan @
+                if (t.Length >= 1 && t.Length <= 12 &&
+                    !t.StartsWith("@") && !t.StartsWith("//") &&
+                    !t.Contains("\n") && !t.Contains(".bss") &&
+                    !t.Contains("/")  && !t.Contains("\\") &&
+                    !t.Contains("。") && !t.Contains("、") &&
+                    !t.Contains("「") && !t.Contains("」") &&
+                    !t.Contains("…"))
+                {
+                    if (freq.ContainsKey(t)) freq[t]++;
+                    else freq[t] = 1;
+                }
+            }
+
+            // Sort by frequency desc, keep entries that appear >= 2x
+            List<KeyValuePair<string, int>> candidates = new List<KeyValuePair<string, int>>();
+            foreach (KeyValuePair<string, int> kv in freq)
+                if (kv.Value >= 2) candidates.Add(kv);
+            candidates.Sort(delegate(KeyValuePair<string,int> a, KeyValuePair<string,int> b) {
+                return b.Value.CompareTo(a.Value);
+            });
+
+            // ── Build dialog ──────────────────────────────────────────
+            Form dlg = new Form();
+            dlg.Text            = "Kamus Nama Karakter";
+            dlg.Size            = new Size(600, 520);
+            dlg.MinimumSize     = new Size(500, 400);
+            dlg.StartPosition   = FormStartPosition.CenterParent;
+            dlg.FormBorderStyle = FormBorderStyle.Sizable;
+            dlg.BackColor       = Clr.BgPanel;
+            dlg.ForeColor       = Clr.TxMain;
+
+            // Info bar
+            Label lblInfo = new Label();
+            lblInfo.Dock      = DockStyle.Top;
+            lblInfo.Height    = 52;
+            lblInfo.Font      = new Font("Segoe UI", 8.5f);
+            lblInfo.ForeColor = Clr.Blue;
+            lblInfo.BackColor = Color.FromArgb(16, 22, 32);
+            lblInfo.Padding   = new Padding(10, 8, 10, 0);
+            lblInfo.Text      =
+                "Nama karakter terdeteksi otomatis (pendek, muncul berulang).\n" +
+                "Isi kolom Terjemahan, lalu klik Terapkan. Semua baris yang exact-match\n" +
+                "nama tersebut akan langsung diganti sekaligus.";
+
+            // Grid
+            DataGridView dgv = new DataGridView();
+            dgv.Dock                      = DockStyle.Fill;
+            dgv.BackgroundColor           = Clr.BgDark;
+            dgv.GridColor                 = Clr.Bdr;
+            dgv.AllowUserToAddRows        = false;
+            dgv.AllowUserToDeleteRows     = false;
+            dgv.MultiSelect               = false;
+            dgv.RowHeadersVisible         = false;
+            dgv.SelectionMode             = DataGridViewSelectionMode.FullRowSelect;
+            dgv.EditMode                  = DataGridViewEditMode.EditOnKeystrokeOrF2;
+            dgv.EnableHeadersVisualStyles = false;
+            dgv.DefaultCellStyle.BackColor          = Clr.BgInput;
+            dgv.DefaultCellStyle.ForeColor          = Clr.TxMain;
+            dgv.DefaultCellStyle.SelectionBackColor = Clr.SelBg;
+            dgv.DefaultCellStyle.SelectionForeColor = Clr.Gold;
+            dgv.DefaultCellStyle.Font               = new Font("MS Gothic", 10f);
+            dgv.ColumnHeadersDefaultCellStyle.BackColor = Clr.BgPanel;
+            dgv.ColumnHeadersDefaultCellStyle.ForeColor = Clr.TxMuted;
+            dgv.ColumnHeadersDefaultCellStyle.Font      = new Font("Segoe UI", 8.5f);
+
+            // Columns: Nama JP | Frekuensi | Terjemahan | Status
+            var cJP   = new DataGridViewTextBoxColumn(); cJP.HeaderText = "Nama (JP)"; cJP.Width = 140; cJP.ReadOnly = true;
+            cJP.DefaultCellStyle.Font = new Font("MS Gothic", 11f);
+            cJP.DefaultCellStyle.ForeColor = Clr.TxDim;
+
+            var cFreq = new DataGridViewTextBoxColumn(); cFreq.HeaderText = "Muncul"; cFreq.Width = 60; cFreq.ReadOnly = true;
+            cFreq.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
+            cFreq.DefaultCellStyle.ForeColor  = Clr.TxMuted;
+            cFreq.DefaultCellStyle.Font       = new Font("Segoe UI", 9f);
+
+            var cTrans = new DataGridViewTextBoxColumn(); cTrans.HeaderText = "Terjemahan / Nama ID"; cTrans.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+            cTrans.DefaultCellStyle.Font = new Font("Consolas", 10f);
+            cTrans.DefaultCellStyle.ForeColor = Clr.TxMain;
+
+            var cStat = new DataGridViewTextBoxColumn(); cStat.HeaderText = ""; cStat.Width = 24; cStat.ReadOnly = true;
+            cStat.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
+            cStat.DefaultCellStyle.Font      = new Font("Segoe UI", 9f);
+
+            dgv.Columns.Add(cJP); dgv.Columns.Add(cFreq); dgv.Columns.Add(cTrans); dgv.Columns.Add(cStat);
+
+            // Populate rows
+            foreach (KeyValuePair<string, int> kv in candidates)
+            {
+                // Check if already has a translation in any matching row
+                string existingTrans = "";
+                for (int i = 0; i < _originals.Length; i++)
+                {
+                    if (_originals[i] != null && _originals[i].Trim() == kv.Key &&
+                        _translations[i] != null && _translations[i].Trim() != "")
+                    { existingTrans = _translations[i].Trim(); break; }
+                }
+                string stat = existingTrans != "" ? "●" : "○";
+                int ri = dgv.Rows.Add(kv.Key, kv.Value + "×", existingTrans, stat);
+                if (existingTrans != "")
+                    dgv.Rows[ri].DefaultCellStyle.ForeColor = Clr.Green;
+            }
+
+            // Update status dot when cell edited
+            dgv.CellEndEdit += delegate(object s2, DataGridViewCellEventArgs e2) {
+                if (e2.ColumnIndex != 2) return;
+                string v = dgv.Rows[e2.RowIndex].Cells[2].Value != null
+                    ? dgv.Rows[e2.RowIndex].Cells[2].Value.ToString() : "";
+                dgv.Rows[e2.RowIndex].Cells[3].Value = v.Trim() != "" ? "●" : "○";
+                dgv.Rows[e2.RowIndex].DefaultCellStyle.ForeColor = v.Trim() != "" ? Clr.Green : Clr.TxMain;
+            };
+
+            // Bottom panel
+            Panel pnlBot = new Panel(); pnlBot.Dock = DockStyle.Bottom; pnlBot.Height = 48; pnlBot.BackColor = Clr.BgPanel;
+
+            Label lblResult = new Label();
+            lblResult.Text = candidates.Count + " nama terdeteksi.";
+            lblResult.ForeColor = Clr.TxDim;
+            lblResult.Font = new Font("Segoe UI", 8.5f);
+            lblResult.SetBounds(10, 14, 280, 20);
+            pnlBot.Controls.Add(lblResult);
+
+            // Add manual row button
+            Button btnAdd = MkBtn("+ Tambah Manual", 10);
+            btnAdd.Top  = 10;
+            btnAdd.Width = 130;
+            btnAdd.Click += delegate {
+                int ri = dgv.Rows.Add("", "", "", "○");
+                dgv.ClearSelection();
+                dgv.Rows[ri].Selected  = true;
+                dgv.CurrentCell        = dgv.Rows[ri].Cells[0];
+                // Make JP column editable for manual entries
+                dgv.Columns[0].ReadOnly = false;
+                dgv.BeginEdit(true);
+            };
+            pnlBot.Controls.Add(btnAdd);
+
+            Button btnClose = MkBtn("Tutup", 0);
+            btnClose.Anchor       = AnchorStyles.Right | AnchorStyles.Top;
+            btnClose.DialogResult = DialogResult.Cancel;
+
+            Button btnApply = MkBtn("Terapkan Semua", 0);
+            btnApply.Anchor    = AnchorStyles.Right | AnchorStyles.Top;
+            btnApply.ForeColor = Clr.Gold;
+            btnApply.Width     = 120;
+            btnApply.BackColor = Color.FromArgb(35, 32, 18);
+            btnApply.FlatAppearance.BorderColor = Clr.GoldDim;
+
+            pnlBot.Controls.Add(btnClose);
+            pnlBot.Controls.Add(btnApply);
+            pnlBot.Resize += delegate {
+                btnClose.Left = pnlBot.Width - 192; btnClose.Top = 10;
+                btnApply.Left = pnlBot.Width - 132; btnApply.Top = 10;
+            };
+
+            // ── Apply logic ───────────────────────────────────────────
+            btnApply.Click += delegate
+            {
+                // Make sure JP column is read-only again for auto-rows
+                dgv.Columns[0].ReadOnly = false; // we'll check per-row
+
+                int totalReplaced = 0;
+                int namesApplied  = 0;
+
+                foreach (DataGridViewRow row in dgv.Rows)
+                {
+                    if (row.IsNewRow) continue;
+                    string jp    = row.Cells[0].Value != null ? row.Cells[0].Value.ToString().Trim() : "";
+                    string trans = row.Cells[2].Value != null ? row.Cells[2].Value.ToString().Trim() : "";
+
+                    if (jp == "" || trans == "") continue;
+
+                    // Replace ALL exact-match rows in the script
+                    int count = 0;
+                    for (int i = 0; i < _originals.Length; i++)
+                    {
+                        if (_originals[i] != null && _originals[i].Trim() == jp)
+                        {
+                            _translations[i] = trans;
+                            count++;
+                        }
+                    }
+
+                    if (count > 0)
+                    {
+                        namesApplied++;
+                        totalReplaced += count;
+                        // Update status dot in dialog grid
+                        row.Cells[3].Value = "●";
+                        row.DefaultCellStyle.ForeColor = Clr.Green;
+                    }
+                }
+
+                if (totalReplaced > 0)
+                {
+                    MarkDirty();
+                    ApplyFilter();
+                    UpdateStats();
+                    string msg = namesApplied + " nama diterapkan, " + totalReplaced + " baris diperbarui.";
+                    lblResult.Text      = msg;
+                    lblResult.ForeColor = Clr.Green;
+                    AddLog("Kamus Nama: " + msg, "OK");
+                }
+                else
+                {
+                    lblResult.Text      = "Tidak ada yang diterapkan. Isi kolom Terjemahan terlebih dahulu.";
+                    lblResult.ForeColor = Clr.TxMuted;
+                }
+            };
+
+            dlg.Controls.Add(dgv);
+            dlg.Controls.Add(lblInfo);
+            dlg.Controls.Add(pnlBot);
+            dlg.CancelButton = btnClose;
+            dlg.Show(this); // non-modal
+        }
+
+        // ══════════════════════════════════════════════════════════════
         //  GLOSSARY
         // ══════════════════════════════════════════════════════════════
         private void OpenGlossary()
@@ -614,6 +857,266 @@ namespace BGITranslator
         }
 
         // ══════════════════════════════════════════════════════════════
+        //  REPLACE (Find & Replace dialog)
+        // ══════════════════════════════════════════════════════════════
+        private void OpenReplace()
+        {
+            if (_originals.Length == 0)
+            {
+                MessageBox.Show("Buka file script terlebih dahulu.", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            Form dlg = new Form();
+            dlg.Text            = "Cari & Ganti";
+            dlg.Size            = new Size(460, 280);
+            dlg.MinimumSize     = new Size(400, 280);
+            dlg.MaximumSize     = new Size(700, 280);
+            dlg.StartPosition   = FormStartPosition.CenterParent;
+            dlg.FormBorderStyle = FormBorderStyle.Sizable;
+            dlg.MaximizeBox     = false;
+            dlg.BackColor       = Clr.BgPanel;
+            dlg.ForeColor       = Clr.TxMain;
+            dlg.ShowInTaskbar   = false;
+
+            // ── Scope radio ───────────────────────────────────────────
+            GroupBox grpScope = new GroupBox();
+            grpScope.Text      = "Lingkup";
+            grpScope.ForeColor = Clr.TxMuted;
+            grpScope.Font      = new Font("Segoe UI", 8.5f);
+            grpScope.SetBounds(10, 8, 200, 52);
+            grpScope.BackColor = Clr.BgPanel;
+            grpScope.FlatStyle = FlatStyle.Flat;
+
+            RadioButton rAll = new RadioButton();
+            rAll.Text      = "Semua baris";
+            rAll.Checked   = true;
+            rAll.ForeColor = Clr.TxDim;
+            rAll.Font      = new Font("Segoe UI", 8.5f);
+            rAll.SetBounds(8, 18, 90, 22);
+            rAll.BackColor = Color.Transparent;
+
+            RadioButton rSel = new RadioButton();
+            rSel.Text      = "Hanya view sekarang";
+            rSel.ForeColor = Clr.TxDim;
+            rSel.Font      = new Font("Segoe UI", 8.5f);
+            rSel.SetBounds(100, 18, 150, 22);
+            rSel.BackColor = Color.Transparent;
+
+            grpScope.Controls.Add(rAll);
+            grpScope.Controls.Add(rSel);
+
+            // ── Case-sensitive checkbox ───────────────────────────────
+            CheckBox chkCase = new CheckBox();
+            chkCase.Text      = "Case sensitive";
+            chkCase.ForeColor = Clr.TxDim;
+            chkCase.Font      = new Font("Segoe UI", 8.5f);
+            chkCase.SetBounds(218, 20, 120, 22);
+            chkCase.BackColor = Clr.BgPanel;
+
+            // ── Search in ─────────────────────────────────────────────
+            CheckBox chkInOrig = new CheckBox();
+            chkInOrig.Text      = "Cari di teks JP juga";
+            chkInOrig.ForeColor = Clr.TxDim;
+            chkInOrig.Font      = new Font("Segoe UI", 8.5f);
+            chkInOrig.SetBounds(218, 42, 160, 22);
+            chkInOrig.BackColor = Clr.BgPanel;
+
+            // ── Find field ────────────────────────────────────────────
+            Label lblFind = new Label();
+            lblFind.Text      = "CARI";
+            lblFind.ForeColor = Clr.TxMuted;
+            lblFind.Font      = new Font("Segoe UI", 7.5f);
+            lblFind.SetBounds(10, 68, 60, 16);
+
+            TextBox txtFind = new TextBox();
+            txtFind.BackColor   = Clr.BgInput;
+            txtFind.ForeColor   = Clr.TxMain;
+            txtFind.BorderStyle = BorderStyle.FixedSingle;
+            txtFind.Font        = new Font("Consolas", 10f);
+            txtFind.SetBounds(10, 86, 420, 26);
+
+            // Seed from current search term if any
+            if (_searchTerm != "") txtFind.Text = _searchTerm;
+
+            // ── Replace field ─────────────────────────────────────────
+            Label lblRepl = new Label();
+            lblRepl.Text      = "GANTI DENGAN";
+            lblRepl.ForeColor = Clr.TxMuted;
+            lblRepl.Font      = new Font("Segoe UI", 7.5f);
+            lblRepl.SetBounds(10, 118, 120, 16);
+
+            TextBox txtRepl = new TextBox();
+            txtRepl.BackColor   = Clr.BgInput;
+            txtRepl.ForeColor   = Clr.TxMain;
+            txtRepl.BorderStyle = BorderStyle.FixedSingle;
+            txtRepl.Font        = new Font("Consolas", 10f);
+            txtRepl.SetBounds(10, 136, 420, 26);
+
+            // ── Result label ──────────────────────────────────────────
+            Label lblResult = new Label();
+            lblResult.Text      = "";
+            lblResult.ForeColor = Clr.Gold;
+            lblResult.Font      = new Font("Segoe UI", 8.5f);
+            lblResult.SetBounds(10, 168, 260, 20);
+
+            // ── Buttons ───────────────────────────────────────────────
+            Button btnReplOne = MkBtn2("Ganti Ini", Clr.TxDim,  300, 168, 60);
+            Button btnReplAll = MkBtn2("Ganti Semua", Clr.Gold, 368, 168, 80);
+            btnReplAll.FlatAppearance.BorderColor = Clr.GoldDim;
+            btnReplAll.BackColor = Color.FromArgb(35, 32, 18);
+
+            Button btnClose = MkBtn2("Tutup", Clr.TxDim, 370, 204, 60);
+            btnClose.DialogResult = DialogResult.Cancel;
+
+            // ── "Ganti Ini" logic ─────────────────────────────────────
+            btnReplOne.Click += delegate
+            {
+                string find = txtFind.Text;
+                string repl = txtRepl.Text;
+                if (find == "") { lblResult.Text = "Isi dulu kolom CARI."; return; }
+
+                // Jump to next hit first if nothing selected
+                if (_searchTerm != find)
+                {
+                    _searchTerm = chkCase.Checked ? find : find.ToLowerInvariant();
+                    RunSearch(); RefreshGrid();
+                }
+
+                if (_searchHits.Count == 0) { lblResult.Text = "Tidak ditemukan."; lblResult.ForeColor = Clr.TxMuted; return; }
+
+                // Replace at current hit
+                int vi = _searchHits[_searchCur < 0 ? 0 : _searchCur];
+                int i  = _viewIndices[vi];
+                string current = _translations[i] ?? "";
+                StringComparison sc = chkCase.Checked ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+
+                if (current.IndexOf(find, sc) >= 0)
+                {
+                    _translations[i] = ReplaceFirst(current, find, repl, sc);
+                    _grid.Rows[vi].Cells[2].Value = _translations[i];
+                    _grid.Rows[vi].Cells[3].Value = _translations[i] == "" ? "○" : "●";
+                    if (_selViewRow == vi) { _dTranslation.Text = _translations[i]; _dCharCount.Text = _translations[i].Length + " karakter"; }
+                    MarkDirty(); UpdateStats();
+                    lblResult.Text = "1 penggantian dilakukan."; lblResult.ForeColor = Clr.Green;
+                    NavSearch(1); RefreshGrid();
+                }
+                else
+                {
+                    NavSearch(1); RefreshGrid();
+                    lblResult.Text = "Lanjut ke hasil berikutnya…"; lblResult.ForeColor = Clr.TxMuted;
+                }
+            };
+
+            // ── "Ganti Semua" logic ───────────────────────────────────
+            btnReplAll.Click += delegate
+            {
+                string find = txtFind.Text;
+                string repl = txtRepl.Text;
+                if (find == "") { lblResult.Text = "Isi dulu kolom CARI."; lblResult.ForeColor = Clr.TxMuted; return; }
+
+                StringComparison sc = chkCase.Checked ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+
+                // Determine which indices to work on
+                List<int> targets = new List<int>();
+                if (rSel.Checked)
+                {
+                    // Only visible rows in current view
+                    foreach (int vi in _viewIndices) targets.Add(vi);
+                }
+                else
+                {
+                    // All rows
+                    for (int i = 0; i < _translations.Length; i++) targets.Add(i);
+                }
+
+                int count = 0;
+                foreach (int i in targets)
+                {
+                    string src = "";
+                    // Check terjemahan
+                    if (_translations[i] != null && _translations[i].IndexOf(find, sc) >= 0)
+                    {
+                        _translations[i] = ReplaceAll(_translations[i], find, repl, sc);
+                        count++;
+                    }
+                    // Check JP juga kalau dicentang (replace ke terjemahan based on JP match)
+                    else if (chkInOrig.Checked && (_originals[i] ?? "").IndexOf(find, sc) >= 0)
+                    {
+                        _translations[i] = ReplaceAll(_originals[i], find, repl, sc);
+                        count++;
+                    }
+                }
+
+                if (count > 0)
+                {
+                    MarkDirty();
+                    ApplyFilter();
+                    UpdateStats();
+                    lblResult.Text = count + " penggantian dilakukan.";
+                    lblResult.ForeColor = Clr.Green;
+                    AddLog("Replace All: \"" + find + "\" → \"" + repl + "\" | " + count + " baris.", "OK");
+                }
+                else
+                {
+                    lblResult.Text = "Tidak ada yang cocok.";
+                    lblResult.ForeColor = Clr.TxMuted;
+                }
+            };
+
+            dlg.Controls.AddRange(new Control[] {
+                grpScope, chkCase, chkInOrig,
+                lblFind, txtFind,
+                lblRepl, txtRepl,
+                lblResult, btnReplOne, btnReplAll, btnClose
+            });
+
+            dlg.CancelButton = btnClose;
+            dlg.KeyPreview   = true;
+            dlg.KeyDown += delegate(object s, KeyEventArgs e) {
+                if (e.KeyCode == Keys.Escape) dlg.Close();
+                if (e.KeyCode == Keys.Return && !e.Shift) { btnReplOne.PerformClick(); e.Handled = true; }
+            };
+
+            txtFind.Focus();
+            dlg.Show(this);  // non-modal so user can still see grid
+        }
+
+        // ── String replace helpers ─────────────────────────────────────
+        private static string ReplaceFirst(string src, string find, string repl, StringComparison sc)
+        {
+            int idx = src.IndexOf(find, sc);
+            if (idx < 0) return src;
+            return src.Substring(0, idx) + repl + src.Substring(idx + find.Length);
+        }
+
+        private static string ReplaceAll(string src, string find, string repl, StringComparison sc)
+        {
+            if (src == null || find == "") return src;
+            StringBuilder sb = new StringBuilder();
+            int start = 0;
+            while (true)
+            {
+                int idx = src.IndexOf(find, start, sc);
+                if (idx < 0) { sb.Append(src, start, src.Length - start); break; }
+                sb.Append(src, start, idx - start);
+                sb.Append(repl);
+                start = idx + find.Length;
+            }
+            return sb.ToString();
+        }
+
+        private static Button MkBtn2(string text, Color fc, int x, int y, int w)
+        {
+            Button b = new Button();
+            b.Text = text; b.Width = w; b.Height = 26; b.Left = x; b.Top = y;
+            b.FlatStyle = FlatStyle.Flat; b.BackColor = Color.FromArgb(26, 26, 30);
+            b.ForeColor = fc; b.Font = new Font("Segoe UI", 8.5f);
+            b.FlatAppearance.BorderColor = Clr.Bdr2;
+            return b;
+        }
+
+        // ══════════════════════════════════════════════════════════════
         //  LOG
         // ══════════════════════════════════════════════════════════════
         private void AddLog(string msg, string level)
@@ -632,7 +1135,9 @@ namespace BGITranslator
             if (e.Control && e.KeyCode == Keys.O) { OpenFile(null); e.Handled = true; }
             if (e.Control && e.KeyCode == Keys.S) { SaveFile(false); e.Handled = true; }
             if (e.Control && e.KeyCode == Keys.F) { _searchBox.Focus(); _searchBox.SelectAll(); e.Handled = true; }
+            if (e.Control && e.KeyCode == Keys.H) { OpenReplace(); e.Handled = true; }
             if (e.Control && e.KeyCode == Keys.G) { GoToLine(); e.Handled = true; }
+            if (e.Control && e.KeyCode == Keys.N) { OpenNameDict(); e.Handled = true; }
             if (e.KeyCode == Keys.F3 && !e.Shift) { NavSearch(1);  e.Handled = true; }
             if (e.KeyCode == Keys.F3 && e.Shift)  { NavSearch(-1); e.Handled = true; }
         }
@@ -725,9 +1230,11 @@ namespace BGITranslator
             Add(mFile, "Keluar",                    delegate { Close(); });
 
             Add(mEdit, "Cari\tCtrl+F",              delegate { _searchBox.Focus(); _searchBox.SelectAll(); });
+            Add(mEdit, "Cari & Ganti\tCtrl+H",      delegate { OpenReplace(); });
             Add(mEdit, "Pergi ke Baris\tCtrl+G",    delegate { GoToLine(); });
 
             Add(mTools, "Glosarium Otomatis…",      delegate { OpenGlossary(); });
+            Add(mTools, "Kamus Nama Karakter…\tCtrl+N", delegate { OpenNameDict(); });
             Add(mTools, "Salin Semua Teks JP",      delegate { CopyAllJP(); });
             mTools.DropDownItems.Add(new ToolStripSeparator());
             Add(mTools, "Statistik…",               delegate { ShowStats(); });
@@ -932,10 +1439,17 @@ namespace BGITranslator
         private void ShowShortcuts()
         {
             MessageBox.Show(
-                "Ctrl+O        Buka file\n" + "Ctrl+S        Simpan\n" + "Ctrl+F        Fokus ke pencarian\n" +
-                "F3            Hasil berikutnya\n" + "Shift+F3      Hasil sebelumnya\n" +
-                "Ctrl+G        Pergi ke nomor baris\n" + "Enter         Edit sel terjemahan\n" +
-                "Tab           Pindah ke baris berikutnya\n" + "Esc           Bersihkan pencarian",
+                "Ctrl+O        Buka file\n" +
+                "Ctrl+S        Simpan\n" +
+                "Ctrl+F        Fokus ke pencarian\n" +
+                "Ctrl+H        Buka Cari & Ganti\n" +
+                "Ctrl+N        Kamus Nama Karakter\n" +
+                "F3            Hasil pencarian berikutnya\n" +
+                "Shift+F3      Hasil pencarian sebelumnya\n" +
+                "Ctrl+G        Pergi ke nomor baris\n" +
+                "Enter         Edit sel terjemahan\n" +
+                "Tab           Pindah ke baris berikutnya\n" +
+                "Esc           Bersihkan pencarian / tutup dialog",
                 "Pintasan Keyboard", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
