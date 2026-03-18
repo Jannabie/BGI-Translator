@@ -659,19 +659,23 @@ namespace BGITranslator
             Button btnClose = MkBtn("Tutup", 0);
             btnClose.Anchor       = AnchorStyles.Right | AnchorStyles.Top;
             btnClose.DialogResult = DialogResult.Cancel;
+            btnClose.Width        = 80;
 
             Button btnApply = MkBtn("Terapkan Semua", 0);
             btnApply.Anchor    = AnchorStyles.Right | AnchorStyles.Top;
             btnApply.ForeColor = Clr.Gold;
-            btnApply.Width     = 120;
+            btnApply.Width     = 140;
             btnApply.BackColor = Color.FromArgb(35, 32, 18);
             btnApply.FlatAppearance.BorderColor = Clr.GoldDim;
 
             pnlBot.Controls.Add(btnClose);
             pnlBot.Controls.Add(btnApply);
             pnlBot.Resize += delegate {
-                btnClose.Left = pnlBot.Width - 192; btnClose.Top = 10;
-                btnApply.Left = pnlBot.Width - 132; btnApply.Top = 10;
+                int margin = 12;
+                btnApply.Left = pnlBot.Width - btnApply.Width - margin;
+                btnApply.Top  = 10;
+                btnClose.Left = btnApply.Left - btnClose.Width - 8;
+                btnClose.Top  = 10;
             };
 
             // ── Apply logic ───────────────────────────────────────────
