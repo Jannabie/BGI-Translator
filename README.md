@@ -23,7 +23,8 @@ Letakkan file berikut dalam satu folder:
   ├── BGITranslator.dll
   ├── BGITranslator.runtimeconfig.json
   ├── EthornellEditor.dll   ← wajib ada
-  └── CSystemArc.exe
+  ├── CSystemArc.exe
+  └── + Pindahkan semua hasil build.
 ```
 
 > `EthornellEditor.dll` harus berada di folder yang sama dengan `.exe`.
