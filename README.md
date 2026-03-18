@@ -203,11 +203,4 @@ byte[] Export()
 ## Kredit
 
 - **[arcusmaximus](https://github.com/arcusmaximus)** — `EthornellEditor.dll`, `BgiDisassembler.exe`, `CSystemArc.exe`, `BgiImageEncoder.exe`
-- **[Makoto Seu](https://vndb.org/p196)** — *Sakura no Uta -Haru no Yuki-* (game yang digunakan sebagai test)
 
----
-
-## Lisensi
-
-Proyek ini bersifat open source untuk keperluan fan translation.  
-`EthornellEditor.dll` dan tools pendukung adalah milik masing-masing pembuatnya.
